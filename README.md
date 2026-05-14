@@ -1,6 +1,3 @@
-# painel-togni
-painel para Organização do MKT, CM e GT
-<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
