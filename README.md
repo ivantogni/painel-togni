@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -781,15 +782,12 @@ table.lead-table {
     <button class="btn-add-camp" onclick="addCampanha()">+ Adicionar campanha</button>
   </div>
 
-  <!-- UPLOAD CRIATIVOS -->
+  <!-- LINKS CRIATIVOS -->
   <div class="section-block">
-    <div class="block-title">🖼 Criativos anunciados</div>
-    <div class="upload-area" id="upload-trafico">
-      <input type="file" multiple accept="image/*,video/*" onchange="handleUpload(event,'trafico')">
-      <div class="upload-icon">📁</div>
-      <div class="upload-text"><strong>Clique ou arraste</strong> os prints dos criativos<br><small>PNG, JPG — múltiplos arquivos · Serão salvos no Google Drive</small></div>
-    </div>
-    <div class="preview-grid" id="preview-trafico"></div>
+    <div class="block-title">🔗 Links dos criativos anunciados</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Cole os links dos criativos — Instagram, Canva, Google Drive, YouTube, etc.</p>
+    <div id="links-trafico-list"></div>
+    <button class="btn-add-lead" onclick="addLink('trafico')" style="margin-top:8px;">+ Adicionar link de criativo</button>
   </div>
 
   <!-- OBSERVAÇÕES -->
@@ -839,15 +837,12 @@ table.lead-table {
     <button class="btn-add-lead" onclick="addConteudo()">+ Adicionar conteúdo</button>
   </div>
 
-  <!-- UPLOAD MATERIAIS -->
+  <!-- LINKS MATERIAIS -->
   <div class="section-block">
-    <div class="block-title">🖼 Materiais produzidos (criativos, vídeos, artes)</div>
-    <div class="upload-area" id="upload-criacao">
-      <input type="file" multiple accept="image/*,video/*" onchange="handleUpload(event,'criacao')">
-      <div class="upload-icon">🎬</div>
-      <div class="upload-text"><strong>Clique ou arraste</strong> os arquivos produzidos na semana<br><small>PNG, JPG — múltiplos arquivos · Serão salvos no Google Drive</small></div>
-    </div>
-    <div class="preview-grid" id="preview-criacao"></div>
+    <div class="block-title">🔗 Links dos materiais produzidos</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Cole os links dos conteúdos — Instagram, TikTok, Canva, Google Drive, etc.</p>
+    <div id="links-criacao-list"></div>
+    <button class="btn-add-lead" onclick="addLink('criacao')" style="margin-top:8px;">+ Adicionar link de material</button>
   </div>
 
   <!-- RESUMO PARA COMERCIAL -->
@@ -1141,18 +1136,12 @@ async function enviarParaSheets() {
   const btn = document.getElementById('btn-enviar-txt');
   btn.textContent = '⏳ Preparando...';
 
-  const imagensTrafico = await coletarImagensBase64('trafico');
-  const imagensCriacao = await coletarImagensBase64('criacao');
-  const totalImgs = imagensTrafico.length + imagensCriacao.length;
-
-  if (totalImgs > 0) btn.textContent = `⏳ Enviando + ${totalImgs} imagem(ns)...`;
-
   const payload = {
     trafico: coletarTrafico(),
     criacao: coletarCriacao(),
     comercial: coletarComercial(),
-    imagensTrafico,
-    imagensCriacao,
+    linksTrafico: coletarLinks('trafico'),
+    linksCriacao: coletarLinks('criacao'),
     timestamp: new Date().toISOString(),
   };
 
@@ -1165,24 +1154,13 @@ async function enviarParaSheets() {
     const json = await resp.json().catch(() => null);
     btn.textContent = '↗ Enviar para Google Sheets';
     fecharModal();
-    if (json && json.status === 'ok') {
-      const total = json.totalImagens || 0;
-      const msg = total > 0
-        ? `✅ Dados enviados! ${total} imagem(ns) salva(s) no Google Drive.`
-        : '✅ Dados enviados para o Google Sheets!';
-      showToast(msg);
-      if (json.linksTrafico?.length || json.linksCriacao?.length) {
-        mostrarLinksRecebidos([...(json.linksTrafico||[]), ...(json.linksCriacao||[])]);
-      }
-    } else {
-      showToast('✅ Enviado! Verifique a planilha.');
-    }
+    showToast(json?.status === 'ok' ? '✅ Dados enviados para o Google Sheets!' : '✅ Enviado! Verifique a planilha.');
   } catch(e) {
     try {
       await fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
       btn.textContent = '↗ Enviar para Google Sheets';
       fecharModal();
-      showToast('✅ Enviado! Verifique a planilha e o Google Drive.');
+      showToast('✅ Enviado! Verifique a planilha.');
     } catch(e2) {
       btn.textContent = '↗ Enviar para Google Sheets';
       showToast('❌ Erro ao enviar. Verifique a URL.');
@@ -1190,16 +1168,7 @@ async function enviarParaSheets() {
   }
 }
 
-// ── CONVERTER IMAGENS PARA BASE64 ──
-async function coletarImagensBase64(area) {
-  const imgs = uploadedFiles[area] || [];
-  const result = [];
-  for (const img of imgs) {
-    if (!img) continue;
-    result.push({ name: img.name, type: img.type, data: img.data });
-  }
-  return result;
-}
+
 
 async function enviarDireto() {
   const url = localStorage.getItem('togni_script_url');
@@ -1210,45 +1179,30 @@ async function enviarDireto() {
     return;
   }
 
-  showToast('⏳ Preparando dados e imagens...');
-
-  const imagensTrafico = await coletarImagensBase64('trafico');
-  const imagensCriacao = await coletarImagensBase64('criacao');
-  const totalImgs = imagensTrafico.length + imagensCriacao.length;
-  if (totalImgs > 0) showToast(`⏳ Enviando dados + ${totalImgs} imagem(ns)...`);
+  showToast('⏳ Enviando dados...');
 
   const payload = {
     trafico: coletarTrafico(),
     criacao: coletarCriacao(),
     comercial: coletarComercial(),
-    imagensTrafico,
-    imagensCriacao,
+    linksTrafico: coletarLinks('trafico'),
+    linksCriacao: coletarLinks('criacao'),
     timestamp: new Date().toISOString(),
   };
 
   try {
-    // Usar o proxy via URL com parâmetro para evitar CORS
-    const urlProxy = url + '?callback=resposta';
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' }, // text/plain passa CORS preflight no Apps Script
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload),
     });
     const json = await resp.json().catch(() => null);
     if (json && json.status === 'ok') {
-      const total = json.totalImagens || 0;
-      const msg = total > 0
-        ? `✅ Dados enviados! ${total} imagem(ns) salva(s) no Drive.`
-        : '✅ Dados enviados para o Google Sheets!';
-      showToast(msg);
-      if (json.linksTrafico?.length || json.linksCriacao?.length) {
-        mostrarLinksRecebidos([...(json.linksTrafico||[]), ...(json.linksCriacao||[])]);
-      }
+      showToast('✅ Dados enviados para o Google Sheets!');
     } else {
       showToast('✅ Enviado! Verifique a planilha.');
     }
   } catch(e) {
-    // Fallback: tenta no-cors (sem confirmação de links mas dados chegam)
     try {
       await fetch(url, {
         method: 'POST',
@@ -1256,26 +1210,14 @@ async function enviarDireto() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload),
       });
-      showToast('✅ Dados enviados! Verifique a planilha e o Drive.');
+      showToast('✅ Dados enviados! Verifique a planilha.');
     } catch(e2) {
-      showToast('❌ Erro ao enviar. Verifique a URL do Apps Script.');
+      showToast('❌ Erro ao enviar. Verifique a URL.');
     }
   }
 }
 
-function mostrarLinksRecebidos(links) {
-  if (!links || links.length === 0) return;
-  let html = '<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#0F2C3E;border:1px solid #D99F6D;border-radius:12px;padding:16px 20px;z-index:999;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">';
-  html += '<div style="font-size:12px;color:#D99F6D;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px;">📎 Criativos salvos no Drive</div>';
-  links.forEach(l => {
-    html += `<div style="margin-bottom:6px;"><a href="${l.url}" target="_blank" style="color:#fff;font-size:13px;text-decoration:none;">↗ ${l.nome}</a></div>`;
-  });
-  html += '<button onclick="this.parentElement.remove()" style="margin-top:10px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:5px 14px;color:#fff;font-size:12px;cursor:pointer;width:100%;">Fechar</button>';
-  html += '</div>';
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  document.body.appendChild(div.firstChild);
-}
+
 
 // ── WEEK DATE ──
 const weekInput = document.getElementById('weekDate');
@@ -1496,33 +1438,67 @@ function calcComKPIs() {
 }
 
 // ── UPLOAD ──
-const uploadedFiles = { trafico: [], criacao: [] };
+const linkFiles = { trafico: [], criacao: [] };
+let linkIdCounter = 0;
 
-function handleUpload(event, area) {
-  const files = Array.from(event.target.files);
-  const preview = document.getElementById('preview-' + area);
-  files.forEach(file => {
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const idx = uploadedFiles[area].length;
-      // Store name, type AND base64 data for Drive upload
-      uploadedFiles[area].push({ name: file.name, type: file.type, data: e.target.result });
-      const div = document.createElement('div');
-      div.className = 'preview-item';
-      div.id = `prev-${area}-${idx}`;
-      div.innerHTML = `<img src="${e.target.result}" alt="${file.name}"><button class="preview-remove" onclick="removePreview('${area}',${idx})">✕</button><div style="position:absolute;bottom:4px;left:4px;right:4px;background:rgba(15,44,62,0.75);color:#D99F6D;font-size:9px;padding:2px 4px;border-radius:3px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</div>`;
-      preview.appendChild(div);
-    };
-    reader.readAsDataURL(file);
+function addLink(area) {
+  linkIdCounter++;
+  const id = linkIdCounter;
+  const container = document.getElementById('links-' + area + '-list');
+  const div = document.createElement('div');
+  div.id = 'link-row-' + id;
+  div.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:10px;';
+  div.innerHTML = `
+    <input type="text" id="link-nome-${id}" placeholder="Nome do criativo (ex: Anúncio Protocolo Emagrecimento)"
+      style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:Outfit,sans-serif;font-size:13px;outline:none;"
+      oninput="updateLinkData('${area}')">
+    <input type="url" id="link-url-${id}" placeholder="https://..."
+      style="flex:2;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:Outfit,sans-serif;font-size:13px;outline:none;"
+      oninput="updateLinkData('${area}')">
+    <button onclick="removeLink(${id},'${area}')"
+      style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;color:var(--muted);font-size:13px;transition:all 0.2s;"
+      onmouseover="this.style.color='#c0392b';this.style.borderColor='#c0392b'"
+      onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">✕</button>
+  `;
+  container.appendChild(div);
+  linkFiles[area].push({ id, nome: '', url: '' });
+  updateBadge(area);
+}
+
+function removeLink(id, area) {
+  document.getElementById('link-row-' + id)?.remove();
+  linkFiles[area] = linkFiles[area].filter(l => l.id !== id);
+  updateBadge(area);
+}
+
+function updateLinkData(area) {
+  linkFiles[area] = [];
+  document.querySelectorAll('[id^="link-nome-"]').forEach(el => {
+    const lid = el.id.replace('link-nome-', '');
+    const urlEl = document.getElementById('link-url-' + lid);
+    if (!urlEl) return;
+    // Only collect links belonging to this area by checking parent container
+    const row = document.getElementById('link-row-' + lid);
+    if (!row) return;
+    const container = row.parentElement;
+    if (container && container.id === 'links-' + area + '-list') {
+      linkFiles[area].push({ id: parseInt(lid), nome: el.value, url: urlEl.value });
+    }
   });
-  updateBadge(area === 'trafico' ? 'trafico' : 'criacao');
 }
 
-function removePreview(area, idx) {
-  document.getElementById(`prev-${area}-${idx}`)?.remove();
-  uploadedFiles[area][idx] = null;
+function coletarLinks(area) {
+  const links = [];
+  document.querySelectorAll('#links-' + area + '-list [id^="link-row-"]').forEach(row => {
+    const id = row.id.replace('link-row-', '');
+    const nome = document.getElementById('link-nome-' + id)?.value?.trim() || '';
+    const url  = document.getElementById('link-url-'  + id)?.value?.trim() || '';
+    if (url) links.push({ nome: nome || url, url });
+  });
+  return links;
 }
+
+
 
 // ── PROGRESS ──
 function updateProgress(tab) {
@@ -1716,18 +1692,7 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// Drag and drop
-document.querySelectorAll('.upload-area').forEach(area => {
-  area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
-  area.addEventListener('dragleave', () => area.classList.remove('dragover'));
-  area.addEventListener('drop', e => {
-    e.preventDefault();
-    area.classList.remove('dragover');
-    const which = area.id.includes('trafico') ? 'trafico' : 'criacao';
-    const fakeEvent = { target: { files: e.dataTransfer.files } };
-    handleUpload(fakeEvent, which);
-  });
-});
+// Links mode — no drag and drop needed
 
 // Init
 weekInput.dispatchEvent(new Event('change'));
